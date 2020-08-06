@@ -28,6 +28,7 @@
 #include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+extern char **environ;
 #endif
 
 #include "libs/json11/json11.hpp"
@@ -156,7 +157,7 @@ struct RpcServer {
 struct RpcModule : RTLIL::Module {
 	std::shared_ptr<RpcServer> server;
 
-	RTLIL::IdString derive(RTLIL::Design *design, dict<RTLIL::IdString, RTLIL::Const> parameters, bool /*mayfail*/) YS_OVERRIDE {
+	RTLIL::IdString derive(RTLIL::Design *design, const dict<RTLIL::IdString, RTLIL::Const> &parameters, bool /*mayfail*/) override {
 		std::string stripped_name = name.str();
 		if (stripped_name.compare(0, 9, "$abstract") == 0)
 			stripped_name = stripped_name.substr(9);
@@ -215,7 +216,9 @@ struct RpcModule : RTLIL::Module {
 
 				module.second->name = mangled_name;
 				module.second->design = design;
-				module.second->attributes.erase("\\top");
+				module.second->attributes.erase(ID::top);
+				if (!module.second->has_attribute(ID::hdlname))
+					module.second->set_string_attribute(ID::hdlname, module.first.str());
 				design->modules_[mangled_name] = module.second;
 				derived_design->modules_.erase(module.first);
 			}
@@ -226,7 +229,7 @@ struct RpcModule : RTLIL::Module {
 		return derived_name;
 	}
 
-	RTLIL::Module *clone() const YS_OVERRIDE {
+	RTLIL::Module *clone() const override {
 		RpcModule *new_mod = new RpcModule;
 		new_mod->server = server;
 		cloneInto(new_mod);
@@ -236,13 +239,18 @@ struct RpcModule : RTLIL::Module {
 
 #if defined(_WIN32)
 
+#if defined(_MSC_VER)
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
+
 struct HandleRpcServer : RpcServer {
 	HANDLE hsend, hrecv;
 
 	HandleRpcServer(const std::string &name, HANDLE hsend, HANDLE hrecv)
 		: RpcServer(name), hsend(hsend), hrecv(hrecv) { }
 
-	void write(const std::string &data) YS_OVERRIDE {
+	void write(const std::string &data) override {
 		log_assert(data.length() >= 1 && data.find('\n') == data.length() - 1);
 		ssize_t offset = 0;
 		do {
@@ -253,7 +261,7 @@ struct HandleRpcServer : RpcServer {
 		} while(offset < (ssize_t)data.length());
 	}
 
-	std::string read() YS_OVERRIDE {
+	std::string read() override {
 		std::string data;
 		ssize_t offset = 0;
 		while (data.length() == 0 || data[data.length() - 1] != '\n') {
@@ -296,7 +304,7 @@ struct FdRpcServer : RpcServer {
 			log_cmd_error("RPC frontend terminated unexpectedly\n");
 	}
 
-	void write(const std::string &data) YS_OVERRIDE {
+	void write(const std::string &data) override {
 		log_assert(data.length() >= 1 && data.find('\n') == data.length() - 1);
 		ssize_t offset = 0;
 		do {
@@ -308,7 +316,7 @@ struct FdRpcServer : RpcServer {
 		} while(offset < (ssize_t)data.length());
 	}
 
-	std::string read() YS_OVERRIDE {
+	std::string read() override {
 		std::string data;
 		ssize_t offset = 0;
 		while (data.length() == 0 || data[data.length() - 1] != '\n') {
@@ -338,7 +346,7 @@ struct FdRpcServer : RpcServer {
 // RpcFrontend does not inherit from Frontend since it does not read files.
 struct RpcFrontend : public Pass {
 	RpcFrontend() : Pass("connect_rpc", "connect to RPC frontend") { }
-	void help() YS_OVERRIDE
+	void help() override
 	{
 		//   |---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|---v---|
 		log("\n");
@@ -382,7 +390,7 @@ struct RpcFrontend : public Pass {
 		log("        so the response should be the same whenever the same set of parameters\n");
 		log("        is provided.\n");
 	}
-	void execute(std::vector<std::string> args, RTLIL::Design *design) YS_OVERRIDE
+	void execute(std::vector<std::string> args, RTLIL::Design *design) override
 	{
 		log_header(design, "Connecting to RPC frontend.\n");
 

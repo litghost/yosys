@@ -362,6 +362,7 @@ with open(outfile, "w") as f:
     print("  Module *module;", file=f)
     print("  SigMap sigmap;", file=f)
     print("  std::function<void()> on_accept;", file=f)
+    print("  bool setup_done;", file=f)
     print("  bool generate_mode;", file=f)
     print("  int accept_cnt;", file=f)
     print("", file=f)
@@ -477,7 +478,17 @@ with open(outfile, "w") as f:
     print("", file=f)
 
     print("  {}_pm(Module *module, const vector<Cell*> &cells) :".format(prefix), file=f)
-    print("      module(module), sigmap(module), generate_mode(false), rngseed(12345678) {", file=f)
+    print("      module(module), sigmap(module), setup_done(false), generate_mode(false), rngseed(12345678) {", file=f)
+    print("    setup(cells);", file=f)
+    print("  }", file=f)
+    print("", file=f)
+
+    print("  {}_pm(Module *module) :".format(prefix), file=f)
+    print("      module(module), sigmap(module), setup_done(false), generate_mode(false), rngseed(12345678) {", file=f)
+    print("  }", file=f)
+    print("", file=f)
+
+    print("  void setup(const vector<Cell*> &cells) {", file=f)
     for current_pattern in sorted(patterns.keys()):
         for s, t in sorted(udata_types[current_pattern].items()):
             if t.endswith("*"):
@@ -485,6 +496,8 @@ with open(outfile, "w") as f:
             else:
                 print("    ud_{}.{} = {}();".format(current_pattern, s, t), file=f)
     current_pattern = None
+    print("    log_assert(!setup_done);", file=f)
+    print("    setup_done = true;", file=f)
     print("    for (auto port : module->ports)", file=f)
     print("      add_siguser(module->wire(port), nullptr);", file=f)
     print("    for (auto cell : module->cells())", file=f)
@@ -539,6 +552,7 @@ with open(outfile, "w") as f:
 
     for current_pattern in sorted(patterns.keys()):
         print("  int run_{}(std::function<void()> on_accept_f) {{".format(current_pattern), file=f)
+        print("    log_assert(setup_done);", file=f)
         print("    accept_cnt = 0;", file=f)
         print("    on_accept = on_accept_f;", file=f)
         print("    rollback = 0;", file=f)
@@ -575,7 +589,7 @@ with open(outfile, "w") as f:
         if block["type"] in ("match", "code"):
             print("  // {}".format(block["src"]), file=f)
 
-        print("  void block_{}(int recursion YS_ATTRIBUTE(unused)) {{".format(index), file=f)
+        print("  void block_{}(int recursion YS_MAYBE_UNUSED) {{".format(index), file=f)
         current_pattern, current_subpattern = block["pattern"]
 
         if block["type"] == "final":
@@ -622,17 +636,17 @@ with open(outfile, "w") as f:
         for s in sorted(const_st):
             t = state_types[current_pattern][s]
             if t.endswith("*"):
-                print("    {} const &{} YS_ATTRIBUTE(unused) = st_{}.{};".format(t, s, current_pattern, s), file=f)
+                print("    {} const &{} YS_MAYBE_UNUSED = st_{}.{};".format(t, s, current_pattern, s), file=f)
             else:
-                print("    const {} &{} YS_ATTRIBUTE(unused) = st_{}.{};".format(t, s, current_pattern, s), file=f)
+                print("    const {} &{} YS_MAYBE_UNUSED = st_{}.{};".format(t, s, current_pattern, s), file=f)
 
         for s in sorted(nonconst_st):
             t = state_types[current_pattern][s]
-            print("    {} &{} YS_ATTRIBUTE(unused) = st_{}.{};".format(t, s, current_pattern, s), file=f)
+            print("    {} &{} YS_MAYBE_UNUSED = st_{}.{};".format(t, s, current_pattern, s), file=f)
 
         for u in sorted(udata_types[current_pattern].keys()):
             t = udata_types[current_pattern][u]
-            print("    {} &{} YS_ATTRIBUTE(unused) = ud_{}.{};".format(t, u, current_pattern, u), file=f)
+            print("    {} &{} YS_MAYBE_UNUSED = ud_{}.{};".format(t, u, current_pattern, u), file=f)
 
         if len(restore_st):
             print("", file=f)
@@ -662,7 +676,7 @@ with open(outfile, "w") as f:
 
             print("", file=f)
             print("rollback_label:", file=f)
-            print("    YS_ATTRIBUTE(unused);", file=f)
+            print("    YS_MAYBE_UNUSED;", file=f)
 
             if len(block["fcode"]):
                 print("#define accept do { accept_cnt++; on_accept(); } while(0)", file=f)
@@ -670,7 +684,7 @@ with open(outfile, "w") as f:
                 for line in block["fcode"]:
                     print("  " + line, file=f)
                 print("finish_label:", file=f)
-                print("    YS_ATTRIBUTE(unused);", file=f)
+                print("    YS_MAYBE_UNUSED;", file=f)
                 print("#undef accept", file=f)
                 print("#undef finish", file=f)
 
@@ -719,13 +733,13 @@ with open(outfile, "w") as f:
             valueidx = 1
             for item in block["setup"]:
                 if item[0] == "slice":
-                    print("        const int &{} YS_ATTRIBUTE(unused) = std::get<{}>(cells[_pmg_idx]);".format(item[1], valueidx), file=f)
+                    print("        const int &{} YS_MAYBE_UNUSED = std::get<{}>(cells[_pmg_idx]);".format(item[1], valueidx), file=f)
                     valueidx += 1
                 if item[0] == "choice":
-                    print("        const {} &{} YS_ATTRIBUTE(unused) = std::get<{}>(cells[_pmg_idx]);".format(item[1], item[2], valueidx), file=f)
+                    print("        const {} &{} YS_MAYBE_UNUSED = std::get<{}>(cells[_pmg_idx]);".format(item[1], item[2], valueidx), file=f)
                     valueidx += 1
                 if item[0] == "define":
-                    print("        const {} &{} YS_ATTRIBUTE(unused) = std::get<{}>(cells[_pmg_idx]);".format(item[1], item[2], valueidx), file=f)
+                    print("        const {} &{} YS_MAYBE_UNUSED = std::get<{}>(cells[_pmg_idx]);".format(item[1], item[2], valueidx), file=f)
                     valueidx += 1
             print("        if (blacklist_cells.count({})) continue;".format(block["cell"]), file=f)
             for expr in block["filter"]:

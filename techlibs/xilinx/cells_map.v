@@ -18,16 +18,6 @@
  *
  */
 
-// Convert negative-polarity reset to positive-polarity
-(* techmap_celltype = "$_DFF_NN0_" *)
-module _90_dff_nn0_to_np0 (input D, C, R, output Q); \$_DFF_NP0_  _TECHMAP_REPLACE_ (.D(D), .Q(Q), .C(C), .R(~R)); endmodule
-(* techmap_celltype = "$_DFF_PN0_" *)
-module _90_dff_pn0_to_pp0 (input D, C, R, output Q); \$_DFF_PP0_  _TECHMAP_REPLACE_ (.D(D), .Q(Q), .C(C), .R(~R)); endmodule
-(* techmap_celltype = "$_DFF_NN1_" *)
-module _90_dff_nn1_to_np1 (input D, C, R, output Q); \$_DFF_NP1_   _TECHMAP_REPLACE_ (.D(D), .Q(Q), .C(C), .R(~R)); endmodule
-(* techmap_celltype = "$_DFF_PN1_" *)
-module _90_dff_pn1_to_pp1 (input D, C, R, output Q); \$_DFF_PP1_   _TECHMAP_REPLACE_ (.D(D), .Q(Q), .C(C), .R(~R)); endmodule
-
 module \$__SHREG_ (input C, input D, input E, output Q);
   parameter DEPTH = 0;
   parameter [DEPTH-1:0] INIT = 0;
@@ -71,7 +61,10 @@ module \$__XILINX_SHREG_ (input C, input D, input [31:0] L, input E, output Q, o
       else
           FDRE_1 #(.INIT(INIT_R)) _TECHMAP_REPLACE_ (.D(D), .Q(Q), .C(C), .CE(CE), .R(1'b0));
     end else
-    if (DEPTH <= 32) begin
+    if (DEPTH <= 16) begin
+      SRL16E #(.INIT(INIT_R), .IS_CLK_INVERTED(~CLKPOL[0])) _TECHMAP_REPLACE_ (.A0(L[0]), .A1(L[1]), .A2(L[2]), .A3(L[3]), .CE(CE), .CLK(C), .D(D), .Q(Q));
+    end else
+    if (DEPTH > 17 && DEPTH <= 32) begin
       SRLC32E #(.INIT(INIT_R), .IS_CLK_INVERTED(~CLKPOL[0])) _TECHMAP_REPLACE_ (.A(L[4:0]), .CE(CE), .CLK(C), .D(D), .Q(Q));
     end else
     if (DEPTH > 33 && DEPTH <= 64) begin
@@ -154,8 +147,11 @@ module \$__XILINX_SHIFTX (A, B, Y);
   parameter B_WIDTH = 1;
   parameter Y_WIDTH = 1;
 
+  (* force_downto *)
   input [A_WIDTH-1:0] A;
+  (* force_downto *)
   input [B_WIDTH-1:0] B;
+  (* force_downto *)
   output [Y_WIDTH-1:0] Y;
 
   parameter [A_WIDTH-1:0] _TECHMAP_CONSTMSK_A_ = 0;
@@ -291,8 +287,11 @@ module _90__XILINX_SHIFTX (A, B, Y);
   parameter B_WIDTH = 1;
   parameter Y_WIDTH = 1;
 
+  (* force_downto *)
   input [A_WIDTH-1:0] A;
+  (* force_downto *)
   input [B_WIDTH-1:0] B;
+  (* force_downto *)
   output [Y_WIDTH-1:0] Y;
 
   \$shiftx  #(.A_SIGNED(A_SIGNED), .B_SIGNED(B_SIGNED), .A_WIDTH(A_WIDTH), .B_WIDTH(B_WIDTH), .Y_WIDTH(Y_WIDTH)) _TECHMAP_REPLACE_ (.A(A), .B(B), .Y(Y));
@@ -359,4 +358,12 @@ module \$__XILINX_MUXF78 (O, I0, I1, I2, I3, S0, S1);
     assign O = T0;
   else
     MUXF8 mux8 (.I0(T0), .I1(T1), .S(S1), .O(O));
+endmodule
+
+module \$__XILINX_TINOUTPAD (input I, OE, output O, inout IO);
+  IOBUF _TECHMAP_REPLACE_ (.I(I), .O(O), .T(~OE), .IO(IO));
+endmodule
+
+module \$__XILINX_TOUTPAD (input I, OE, output O);
+  OBUFT _TECHMAP_REPLACE_ (.I(I), .O(O), .T(~OE));
 endmodule
